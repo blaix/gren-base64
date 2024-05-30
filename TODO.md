@@ -1,3 +1,5 @@
+- [ ] Update LICENSE and any other copyright/etc notices
 - [ ] Convert to gren. Make sure tests pass.
+- [ ] Update docs and README
 - [ ] Create gren package. Update repo link.
 - [ ] Test-drive Base64.toString, fromString, toBytes, fromBytes wrappers
