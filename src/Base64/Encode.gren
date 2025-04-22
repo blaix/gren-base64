@@ -70,13 +70,15 @@ encodeBytes bytes_ =
         decoder = 
             Bytes.Decode.loop { index = 0, ints = [] } (\state ->
                 if state.index >= Bytes.length bytes_ then
-                    Bytes.Decode.succeed (Bytes.Decode.Done (Array.reverse state.ints))
+                    state.ints
+                        |> Bytes.Decode.Done
+                        |> Bytes.Decode.succeed
                 else
                     Bytes.Decode.unsignedInt8
                         |> Bytes.Decode.map (\byte -> 
                             Bytes.Decode.Loop { 
                                 index = state.index + 1, 
-                                ints = Array.pushFirst byte state.ints 
+                                ints = Array.pushLast byte state.ints 
                             }
                         )
             )
