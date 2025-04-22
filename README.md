@@ -20,7 +20,7 @@ encodedString =
 encodedBytes =
     "Hello"
         |> Bytes.fromString
-        |> Encode.string
+        |> Encode.bytes
         |> Encode.encode
         -- returns: "SGVsbG8="
 ```
