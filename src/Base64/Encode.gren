@@ -27,9 +27,8 @@ type Encoder
 {-| Create an encoder for a string.
 
     Base64.Encode.string "Hello, World!"
-        |> Base64.encode
-
-        -- Results in: "SGVsbG8sIFdvcmxkIQ=="
+        |> Base64.Encode.encode
+        -- returns: "SGVsbG8sIFdvcmxkIQ=="
 -}
 string : String -> Encoder
 string str =
@@ -42,8 +41,7 @@ string str =
         |> Bytes.fromString
         |> Base64.Encode.bytes
         |> Base64.encode
-
-    -- Results in: "SGVsbG8sIFdvcmxkIQ=="
+        -- returns: "SGVsbG8sIFdvcmxkIQ=="
 -}
 bytes : Bytes -> Encoder
 bytes data =
