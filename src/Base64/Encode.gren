@@ -10,11 +10,9 @@ module Base64.Encode exposing (Encoder, encode, string, bytes)
 
 -}
 
-import Array exposing (Array)
 import Bitwise
 import Bytes exposing (Bytes)
 import Bytes.Decode
-import String
 
 
 {-| Represents a value to be encoded.
