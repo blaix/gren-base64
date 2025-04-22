@@ -1,0 +1,206 @@
+module Main exposing (main)
+
+import Base64.Encode
+import Bytes exposing (Bytes)
+import Bytes.Encode
+import Expect
+import FileSystem
+import FileSystem.Path as Path
+import Init
+import Node
+import Task exposing (Task)
+import Test.Runner.Effectful exposing (Program, Test, await, describe, run, test)
+
+
+testCases =
+    { whitespace =
+        { input = 
+            [ " "
+            , "\n"
+            , "\t"
+            , "\r"
+            , "\n \t\r"
+            ]
+        , output =
+            [ "IA=="
+            , "Cg=="
+            , "CQ=="
+            , "DQ=="
+            , "CiAJDQ=="
+            ]
+        }
+    , specialCharacters =
+        { input =
+            [ "🌈"
+            , "\u{001b}"
+            , "🚀\u{001b}🧡"
+            ]
+        , output =
+            [ "8J+MiA=="
+            , "Gw=="
+            , "8J+agBvwn6eh"
+            ]
+        }
+    , shortStrings =
+        { input =
+            [ "Hel"
+            , "Hell"
+            , "Hello"
+            , "Hello, World!"
+            ]
+        , output =
+            [ "SGVs"
+            , "SGVsbA=="
+            , "SGVsbG8="
+            , "SGVsbG8sIFdvcmxkIQ=="
+            ]
+        }
+    , longStrings =
+        { input = 
+            [ String.repeat 500 "Man"
+            , String.repeat 5000 "Man"
+            ]
+        , output =
+            [ String.repeat 500 "TWFu"
+            , String.repeat 5000 "TWFu"
+            ]
+        }
+    }
+
+{-| Expected base64 output of sample.png
+-}
+samplePngBase64 : String
+samplePngBase64 =
+    """
+    iVBORw0KGgoAAAANSUhEUgAAAAQAAAAFCAYAAABirU3bAAAABGdBTUEAALGOfPtR
+    kwAAACBjSFJNAACHDwAAjA8AAP1SAACBQAAAfXkAAOmLAAA85QAAGcxzPIV3AAAA
+    hGVYSWZNTQAqAAAACAAFARIAAwAAAAEAAQAAARoABQAAAAEAAABKARsABQAAAAEA
+    AABSASgAAwAAAAEAAgAAh2kABAAAAAEAAABaAAAAAAAAAGAAAAABAAAAYAAAAAEA
+    A6ABAAMAAAABAAEAAKACAAQAAAABAAAABKADAAQAAAABAAAABQAAAADka1Z2AAAA
+    CXBIWXMAAA7EAAAOxAGVKw4bAAABWWlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAA
+    PHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iWE1Q
+    IENvcmUgNi4wLjAiPgogICA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cu
+    dzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRl
+    c2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczp0aWZmPSJo
+    dHRwOi8vbnMuYWRvYmUuY29tL3RpZmYvMS4wLyI+CiAgICAgICAgIDx0aWZmOk9y
+    aWVudGF0aW9uPjE8L3RpZmY6T3JpZW50YXRpb24+CiAgICAgIDwvcmRmOkRlc2Ny
+    aXB0aW9uPgogICA8L3JkZjpSREY+CjwveDp4bXBtZXRhPgoZXuEHAAAAU0lEQVQI
+    HQ2MMQqAMBAE52JCBDsLG1/nt/yQX1EUFSzEQO68YndYBlameTHTSk4JA6I5kg8V
+    ISDE43z4SvFUV0pc9wtVIwg0XnEcerpW2O7XfzI/dGodlNN3c8wAAAAASUVORK5C
+    YII=
+    """
+        |> String.trim
+        |> String.replace "\n" ""
+
+
+readSamplePng : FileSystem.Permission -> Task FileSystem.Error Bytes
+readSamplePng fsPerm =
+    FileSystem.readFile fsPerm (Path.fromPosixString "sample.png")
+
+
+main : Program {}
+main =
+    Node.defineSimpleProgram <| \env ->
+        Init.await FileSystem.initialize <| \fsPerm ->
+            run env (tests fsPerm)
+
+
+tests : FileSystem.Permission -> Test
+tests fsPerm =
+    describe "Base64.Encode"
+        [ describe "encoding strings"
+            [ test "Empty string" <| \_ ->
+                Base64.Encode.encode (Base64.Encode.string "") |> Expect.equal ""
+
+            , test "Whitespace" <| \_ ->
+                testCases.whitespace.input
+                    |> Array.map Base64.Encode.string
+                    |> Array.map Base64.Encode.encode
+                    |> Expect.equalArrays
+                        testCases.whitespace.output
+
+            , test "Special characters" <| \_ ->
+                testCases.specialCharacters.input
+                    |> Array.map Base64.Encode.string
+                    |> Array.map Base64.Encode.encode
+                    |> Expect.equalArrays
+                        testCases.specialCharacters.output
+
+            , test "Short strings" <| \_ ->
+                testCases.shortStrings.input
+                    |> Array.map Base64.Encode.string
+                    |> Array.map Base64.Encode.encode
+                    |> Expect.equalArrays
+                        testCases.shortStrings.output
+
+            , test "Long strings" <| \_ ->
+                testCases.longStrings.input
+                    |> Array.map Base64.Encode.string
+                    |> Array.map Base64.Encode.encode
+                    |> Expect.equalArrays
+                        testCases.longStrings.output
+            ]
+
+        , describe "encoding bytes"
+            [ test "Empty string" <| \_ ->
+                ""
+                    |> Bytes.fromString
+                    |> Base64.Encode.bytes
+                    |> Base64.Encode.encode
+                    |> Expect.equal ""
+
+            , test "Whitespace" <| \_ ->
+                testCases.whitespace.input
+                    |> Array.map Bytes.fromString
+                    |> Array.map Base64.Encode.bytes
+                    |> Array.map Base64.Encode.encode
+                    |> Expect.equalArrays
+                        testCases.whitespace.output
+
+            , test "Special characters" <| \_ ->
+                testCases.specialCharacters.input
+                    |> Array.map Bytes.fromString
+                    |> Array.map Base64.Encode.bytes
+                    |> Array.map Base64.Encode.encode
+                    |> Expect.equalArrays
+                        testCases.specialCharacters.output
+
+            , test "Short strings" <| \_ ->
+                testCases.shortStrings.input
+                    |> Array.map Bytes.fromString
+                    |> Array.map Base64.Encode.bytes
+                    |> Array.map Base64.Encode.encode
+                    |> Expect.equalArrays
+                        testCases.shortStrings.output
+
+            , test "Long strings" <| \_ ->
+                testCases.longStrings.input
+                    |> Array.map Bytes.fromString
+                    |> Array.map Base64.Encode.bytes
+                    |> Array.map Base64.Encode.encode
+                    |> Expect.equalArrays
+                        testCases.longStrings.output
+
+            , test "Integer sequence" <| \_ ->
+                [ 72  -- H
+                , 101 -- e
+                , 108 -- l
+                , 108 -- l
+                , 111 -- o
+                ]
+                    |> Array.map Bytes.Encode.unsignedInt8
+                    |> Bytes.Encode.sequence
+                    |> Bytes.Encode.encode
+                    |> Base64.Encode.bytes
+                    |> Base64.Encode.encode
+                    |> Expect.equal
+                        "SGVsbG8="
+
+            , await (readSamplePng fsPerm) "Read sample PNG file" <| \bytes ->
+                test "Encoding sample PNG file" <| \_ ->
+                    bytes
+                        |> Base64.Encode.bytes
+                        |> Base64.Encode.encode
+                        |> Expect.equal samplePngBase64
+            ]
+        ]

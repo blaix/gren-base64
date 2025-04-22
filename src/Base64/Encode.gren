@@ -1,0 +1,145 @@
+module Base64.Encode exposing (Encoder, encode, string, bytes)
+
+{-| Encode strings and bytes as Base64 strings.
+
+# Encoders
+@docs Encoder, string, bytes
+
+# Encoding
+@docs encode
+
+-}
+
+import Array exposing (Array)
+import Bitwise
+import Bytes exposing (Bytes)
+import Bytes.Decode
+import String
+
+
+{-| Represents a value to be encoded.
+-}
+type Encoder
+    = String String
+    | Bytes Bytes
+
+
+{-| Create an encoder for a string.
+
+    Base64.Encode.string "Hello, World!"
+        |> Base64.encode
+
+        -- Results in: "SGVsbG8sIFdvcmxkIQ=="
+-}
+string : String -> Encoder
+string str =
+    String str
+
+
+{-| Create an encoder for raw bytes.
+    
+    "Hello, World!"
+        |> Bytes.fromString
+        |> Base64.Encode.bytes
+        |> Base64.encode
+
+    -- Results in: "SGVsbG8sIFdvcmxkIQ=="
+-}
+bytes : Bytes -> Encoder
+bytes data =
+    Bytes data
+
+
+{-| Encode a value.
+
+    Base64.encode (Base64.Encode.string "Hello") == "SGVsbG8="
+-}
+encode : Encoder -> String
+encode encoder =
+    when encoder is
+        String str ->
+            Bytes.fromString str
+                |> encodeBytes
+            
+        Bytes data ->
+            encodeBytes data
+
+
+encodeBytes : Bytes -> String
+encodeBytes bytes_ =
+    let
+        decoder : Bytes.Decode.Decoder (Array Int)
+        decoder = 
+            Bytes.Decode.loop { index = 0, ints = [] } (\state ->
+                if state.index >= Bytes.length bytes_ then
+                    Bytes.Decode.succeed (Bytes.Decode.Done (Array.reverse state.ints))
+                else
+                    Bytes.Decode.unsignedInt8
+                        |> Bytes.Decode.map (\byte -> 
+                            Bytes.Decode.Loop { 
+                                index = state.index + 1, 
+                                ints = Array.pushFirst byte state.ints 
+                            }
+                        )
+            )
+
+        ints : Array Int
+        ints =
+            when Bytes.Decode.decode decoder bytes_ is
+                Just b_ -> b_
+                Nothing -> []
+
+        size : Int
+        size =
+            Array.length ints
+
+        step : Int -> String -> String
+        step idx acc =
+            if idx >= size then
+                acc
+            else
+                let
+                    -- Get next chunk of 3 bytes
+                    b1 = Array.get idx ints |> Maybe.withDefault 0
+                    b2 = Array.get (idx + 1) ints |> Maybe.withDefault 0 
+                    b3 = Array.get (idx + 2) ints |> Maybe.withDefault 0
+                    
+                    -- Get next 4 base64 character indices
+                    i1 = Bitwise.shiftRightBy 2 b1
+                    i2 = Bitwise.or (Bitwise.shiftLeftBy 4 (Bitwise.and b1 0x03)) (Bitwise.shiftRightBy 4 b2)
+                    i3 = Bitwise.or (Bitwise.shiftLeftBy 2 (Bitwise.and b2 0x0F)) (Bitwise.shiftRightBy 6 b3)
+                    i4 = Bitwise.and b3 0x3F 
+                    
+                    -- Get the next 4 base64 characters
+                    c1 = getBase64Char i1
+                    c2 = getBase64Char i2
+                    remaining = size - idx -- handle padding
+                    c3 = if remaining > 1 then getBase64Char i3 else '='
+                    c4 = if remaining > 2 then getBase64Char i4 else '='
+                    
+                    -- Create the chunk and continue
+                    chunk = String.fromArray [c1, c2, c3, c4]
+                in
+                step (idx + 3) (acc ++ chunk)
+    in
+    step 0 ""
+
+
+getBase64Char : Int -> Char
+getBase64Char idx =
+    Array.get idx base64Chars
+        |> Maybe.withDefault 'A' -- should never get here!
+
+
+base64Chars : Array Char
+base64Chars =
+    [ 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'
+    , 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'
+    , 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X'
+    , 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f'
+    , 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n'
+    , 'o', 'p', 'q', 'r', 's', 't', 'u', 'v'
+    , 'w', 'x', 'y', 'z', '0', '1', '2', '3'
+    , '4', '5', '6', '7', '8', '9', '+', '/'
+    ]
+
