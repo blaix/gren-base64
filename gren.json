@@ -6,7 +6,8 @@
     "license": "BSD-3-Clause",
     "version": "1.0.1",
     "exposed-modules": [
-        "Base64.Encode"
+        "Base64.Encode",
+        "Base64.Decode"
     ],
     "gren-version": "0.5.0 <= v < 0.6.0",
     "dependencies": {

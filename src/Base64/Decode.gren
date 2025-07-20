@@ -1,0 +1,399 @@
+module Base64.Decode exposing ( Error(..), string, bytes )
+
+{-| Decode Base64 strings.
+
+# Decoders
+
+@docs string, bytes
+
+@docs Error
+
+-}
+
+import Bitwise
+import Bytes exposing ( Bytes )
+import Bytes.Encode
+
+
+{-| The errors that can happen when decoding a Base64 string.
+
+- `InvalidCharacter` happens when encountering an invalid 
+character in the passed Base64 string.
+- `IncorrectPadding` happens when the Base64 string has 
+padding (the `=` character) anywhere other than the the last 
+two characters.
+- `InvalidLength` happens when the Base64 string is an invalid
+length
+- `BytesToString` happens only when using the `string` function
+in this module and there is a problem converting the decoded
+`Bytes` into a `String`.
+-}
+type Error
+    = InvalidCharacter Char
+    | IncorrectPadding
+    | InvalidLength
+    | BytesToString
+
+
+{-| Internal representation of the type of character in a 
+Base64 string.
+-}
+type Base64Char
+    = CharIndex Int
+    | Padding
+    | CharInvalid
+
+
+{-| A chunk, made up of 4 characters.
+-}
+type alias Chunk = 
+    { one : Base64Char
+    , two : Base64Char
+    , three : Base64Char
+    , four : Base64Char
+    }
+
+
+{-| Decode a Base64 string as `Bytes`.
+-}
+bytes : String -> Result Error Bytes
+bytes input =
+    splitIntoChunks input
+        |> Result.map (Array.map decodeChunk)
+        |> Result.map Array.flatten
+        |> Result.map (Array.map Bytes.Encode.unsignedInt8)
+        |> Result.map Bytes.Encode.sequence
+        |> Result.map Bytes.Encode.encode
+
+
+{-| Decode a Base64 string as `String`.
+-}
+string : String -> Result Error String
+string input =
+    bytes input
+        |> Result.andThen (\bytes_ ->
+            when Bytes.toString bytes_ is
+                Just value ->
+                    Ok value
+                
+                Nothing ->
+                    Err BytesToString
+        )
+
+
+{-| Split the given Base64 string into chunks. Mostly a wrapper
+for `splitIntoChunksHelper` function.
+-}
+splitIntoChunks : String -> Result Error (Array Chunk)
+splitIntoChunks passedString =
+    splitIntoChunksHelper 
+        0
+        (String.toArray passedString) 
+        []
+
+
+{-| Transform the given Base64 string into chunks of 4 characters
+for proper decoding.
+-}
+splitIntoChunksHelper : 
+    Int ->
+    Array Char -> 
+    Array Chunk ->
+    Result Error (Array Chunk)
+splitIntoChunksHelper offset charArray acc =
+    let
+        func idx arr paddingAllowed =
+            when Array.get idx arr is
+                Just value ->
+                    when base64CharToCharIndex value is
+                        CharInvalid ->
+                            Err (InvalidCharacter value)
+                        
+                        Padding ->
+                            if paddingAllowed then
+                                Ok Padding
+                            else
+                                Err IncorrectPadding
+                        
+                        CharIndex int ->
+                            Ok (CharIndex int)
+
+                Nothing ->
+                    Err InvalidLength
+
+        chunk =
+            Result.map4
+                (\first second third fourth ->
+                    { one = first
+                    , two = second
+                    , three = third
+                    , four = fourth
+                    }
+                )
+                (func (0 + offset) charArray False)
+                (func (1 + offset) charArray False)
+                (func (2 + offset) charArray True)
+                (func (3 + offset) charArray True)
+    in
+    when chunk is
+        Ok chunkValue ->
+            splitIntoChunksHelper 
+                (offset + 4) 
+                charArray
+                (Array.pushLast chunkValue acc)
+    
+        Err error ->
+            if Array.length acc * 4 >= Array.length charArray then
+                Ok acc
+            else
+                Err error
+
+
+{-| Decode a single chunk of 4 characters.
+-}
+decodeChunk : Chunk -> Array Int
+decodeChunk chunk =
+    when chunk is
+        { one = CharIndex one, two = CharIndex two, three = CharIndex three, four = CharIndex four } ->
+            let
+                byte1 = 
+                    Bitwise.shiftLeftBy 2 one
+                        |> Bitwise.or (Bitwise.shiftRightBy 4 two)
+
+                byte2 = 
+                    Bitwise.shiftLeftBy 4 (Bitwise.and 0x0F two)
+                        |> Bitwise.or (Bitwise.shiftRightBy 2 three)
+
+                byte3 = 
+                    Bitwise.shiftLeftBy 6 (Bitwise.and 0x03 three)
+                        |> Bitwise.or four
+            in
+            [ byte1, byte2, byte3 ]
+
+        { one = CharIndex one, two = CharIndex two, three = CharIndex three, four = Padding } ->
+            let
+                byte1 = 
+                    Bitwise.shiftLeftBy 2 one
+                        |> Bitwise.or (Bitwise.shiftRightBy 4 two)
+
+                byte2 = 
+                    Bitwise.shiftLeftBy 4 (Bitwise.and 0x0F two)
+                        |> Bitwise.or (Bitwise.shiftRightBy 2 three)
+            in
+            [ byte1, byte2 ]
+
+        { one = CharIndex one, two = CharIndex two, three = Padding, four = Padding } ->
+            let
+                byte1 = 
+                    Bitwise.shiftLeftBy 2 one
+                        |> Bitwise.or (Bitwise.shiftRightBy 4 two)
+            in
+            [ byte1 ]
+        
+        _ ->
+            []
+
+
+{-| Convert a given `Char` to 0-63 `Int` value representing the 
+CharIndex the character is for Base64 encoding.
+-}
+base64CharToCharIndex : Char -> Base64Char
+base64CharToCharIndex c =
+    when c is
+        'A' ->
+            CharIndex 0
+
+        'B' ->
+            CharIndex 1
+
+        'C' ->
+            CharIndex 2
+
+        'D' ->
+            CharIndex 3
+
+        'E' ->
+            CharIndex 4
+
+        'F' ->
+            CharIndex 5
+
+        'G' ->
+            CharIndex 6
+
+        'H' ->
+            CharIndex 7
+
+        'I' ->
+            CharIndex 8
+
+        'J' ->
+            CharIndex 9
+
+        'K' ->
+            CharIndex 10
+
+        'L' ->
+            CharIndex 11
+
+        'M' ->
+            CharIndex 12
+
+        'N' ->
+            CharIndex 13
+
+        'O' ->
+            CharIndex 14
+            
+        'P' ->
+            CharIndex 15
+
+        'Q' ->
+            CharIndex 16
+
+        'R' ->
+            CharIndex 17
+
+        'S' ->
+            CharIndex 18
+
+        'T' ->
+            CharIndex 19
+
+        'U' ->
+            CharIndex 20
+
+        'V' ->
+            CharIndex 21
+
+        'W' ->
+            CharIndex 22
+
+        'X' ->
+            CharIndex 23
+            
+        'Y' ->
+            CharIndex 24
+
+        'Z' ->
+            CharIndex 25
+
+        'a' ->
+            CharIndex 26
+
+        'b' ->
+            CharIndex 27
+
+        'c' ->
+            CharIndex 28
+
+        'd' ->
+            CharIndex 29
+
+        'e' ->
+            CharIndex 30
+
+        'f' ->
+            CharIndex 31
+
+        'g' ->
+            CharIndex 32
+
+        'h' ->
+            CharIndex 33
+
+        'i' ->
+            CharIndex 34
+
+        'j' ->
+            CharIndex 35
+
+        'k' ->
+            CharIndex 36
+
+        'l' ->
+            CharIndex 37
+
+        'm' ->
+            CharIndex 38
+
+        'n' ->
+            CharIndex 39
+
+        'o' ->
+            CharIndex 40
+
+        'p' ->
+            CharIndex 41
+
+        'q' ->
+            CharIndex 42
+
+        'r' ->
+            CharIndex 43
+
+        's' ->
+            CharIndex 44
+
+        't' ->
+            CharIndex 45
+
+        'u' ->
+            CharIndex 46
+
+        'v' ->
+            CharIndex 47
+
+        'w' ->
+            CharIndex 48
+
+        'x' ->
+            CharIndex 49
+
+        'y' ->
+            CharIndex 50
+
+        'z' ->
+            CharIndex 51
+
+        '0' ->
+            CharIndex 52
+
+        '1' ->
+            CharIndex 53
+
+        '2' ->
+            CharIndex 54
+            
+        '3' ->
+            CharIndex 55
+
+        '4' ->
+            CharIndex 56
+
+        '5' ->
+            CharIndex 57
+
+        '6' ->
+            CharIndex 58
+
+        '7' ->
+            CharIndex 59
+
+        '8' ->
+            CharIndex 60
+
+        '9' ->
+            CharIndex 61
+
+        '+' -> 
+            CharIndex 62
+
+        '/' ->
+            CharIndex 63
+
+        '=' ->
+            Padding
+
+        _ -> 
+            CharInvalid
