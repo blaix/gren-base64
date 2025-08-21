@@ -122,7 +122,7 @@ splitIntoChunksHelper offset charArray acc =
                     Err InvalidLength
 
         chunk =
-            Result.map4
+            Ok 
                 (\first second third fourth ->
                     { one = first
                     , two = second
@@ -130,10 +130,10 @@ splitIntoChunksHelper offset charArray acc =
                     , four = fourth
                     }
                 )
-                (func (0 + offset) charArray False)
-                (func (1 + offset) charArray False)
-                (func (2 + offset) charArray True)
-                (func (3 + offset) charArray True)
+                |> Result.andMap (func (0 + offset) charArray False)
+                |> Result.andMap (func (1 + offset) charArray False)
+                |> Result.andMap (func (2 + offset) charArray True)
+                |> Result.andMap (func (3 + offset) charArray True)
     in
     when chunk is
         Ok chunkValue ->
