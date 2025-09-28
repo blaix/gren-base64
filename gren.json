@@ -2,9 +2,9 @@
     "type": "package",
     "platform": "common",
     "name": "blaix/gren-base64",
-    "summary": "Base64 encoder for strings",
+    "summary": "Base64 encoder/decoder",
     "license": "BSD-3-Clause",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "exposed-modules": [
         "Base64.Encode",
         "Base64.Decode"
