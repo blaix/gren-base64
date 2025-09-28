@@ -1,3 +1,7 @@
+## 2.0.1 (2025-09-27)
+
+* Doc fixes
+
 ## 2.0.0 (2025-09-27)
 
 * Add decoder (thanks, joeybright!)
